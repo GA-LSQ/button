@@ -4,7 +4,7 @@ on:
 workflow_dispatch:
 inputs:
 tag:
-description: "Release Tag"
+description: "Release Version (leave empty to skip release)"
 required: false
 default: ""
 
@@ -13,18 +13,19 @@ contents: write
 
 jobs:
 build:
-strategy:
-fail-fast: false
-matrix:
-sdk:
-- 24.10.6
-- SNAPSHOT
-
-
 runs-on: ubuntu-latest
 
+```
+strategy:
+  fail-fast: false
+  matrix:
+    sdk:
+      - 24.10.6
+      - SNAPSHOT
+
 steps:
-  - uses: actions/checkout@v4
+  - name: Checkout
+    uses: actions/checkout@v4
 
   - name: Build Package
     uses: openwrt/gh-action-sdk@main
@@ -36,33 +37,41 @@ steps:
       NO_SHFMT_CHECK: 1
       V: s
 
+  - name: Collect Packages
+    run: |
+      mkdir -p output
+      find bin/packages -name "*.ipk" -exec cp {} output/ \; || true
+      find bin/packages -name "*.apk" -exec cp {} output/ \; || true
+
   - name: Upload Artifacts
     uses: actions/upload-artifact@v4
     with:
-      name: ${{ matrix.sdk }}
-      path: |
-        bin/packages/**/*.ipk
-        bin/packages/**/*.apk
-
+      name: packages-${{ matrix.sdk }}
+      path: output/*
+```
 
 release:
+name: Release
 needs: build
-if: github.event.inputs.tag != ''
 runs-on: ubuntu-latest
+if: github.event.inputs.tag != ''
 
-
+```
 steps:
-  - uses: actions/download-artifact@v4
+  - name: Download Artifacts
+    uses: actions/download-artifact@v4
     with:
       path: artifacts
 
-  - run: |
-      mkdir release
+  - name: Prepare Files
+    run: |
+      mkdir -p release
       find artifacts -name "*.ipk" -exec cp {} release/ \;
       find artifacts -name "*.apk" -exec cp {} release/ \;
 
-  - uses: softprops/action-gh-release@v2
+  - name: Publish Release
+    uses: softprops/action-gh-release@v2
     with:
       tag_name: ${{ github.event.inputs.tag }}
       files: release/*
-
+```
