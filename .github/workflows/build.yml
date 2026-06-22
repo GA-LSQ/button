@@ -1,4 +1,4 @@
-name: Build OpenWrt Packages
+name: Build OpenWrt Package
 
 on:
 workflow_dispatch:
@@ -9,67 +9,78 @@ branches:
 
 jobs:
 build:
-runs-on: ubuntu-22.04
+runs-on: ubuntu-latest
 
 ```
 strategy:
+  fail-fast: false
   matrix:
-    include:
-      - name: openwrt-24.10.6
-        branch: openwrt-24.10
-
-      - name: openwrt-master-apk
-        branch: master
+    branch:
+      - openwrt-24.10
+      - master
 
 steps:
-  - uses: actions/checkout@v4
+  - name: Checkout
+    uses: actions/checkout@v4
 
-  - name: Install dependencies
+  - name: Install Dependencies
     run: |
-      sudo apt update
-      sudo apt install -y \
-        build-essential clang flex bison gawk gettext \
-        git libncurses5-dev libssl-dev python3 rsync \
-        unzip zlib1g-dev file wget curl
+      sudo apt-get update
+      sudo apt-get install -y \
+        build-essential \
+        clang \
+        flex \
+        bison \
+        gawk \
+        gettext \
+        git \
+        libncurses5-dev \
+        libssl-dev \
+        python3 \
+        rsync \
+        unzip \
+        zlib1g-dev \
+        file \
+        wget \
+        curl
 
   - name: Clone OpenWrt
     run: |
-      git clone --depth 1 \
+      git clone --depth=1 \
         -b ${{ matrix.branch }} \
         https://github.com/openwrt/openwrt.git
 
-  - name: Update feeds
+  - name: Update Feeds
     run: |
       cd openwrt
       ./scripts/feeds update -a
-      ./scripts/feeds install luci-base
-      ./scripts/feeds install rpcd
+      ./scripts/feeds install -a
 
-  - name: Copy package
+  - name: Copy Package
     run: |
       mkdir -p openwrt/package/luci-app-button
-      cp -rf * openwrt/package/luci-app-button/
+      cp -rf ./* openwrt/package/luci-app-button/
 
-  - name: Configure
+  - name: Defconfig
     run: |
       cd openwrt
       make defconfig
 
-  - name: Compile
+  - name: Compile Package
     run: |
       cd openwrt
-      make package/luci-app-button/compile \
-        V=sc -j$(nproc)
+      make package/luci-app-button/compile V=s -j$(nproc)
 
-  - name: Collect packages
+  - name: Collect Artifacts
     run: |
-      mkdir artifacts
+      mkdir output
       find openwrt/bin/packages \
         \( -name "*.ipk" -o -name "*.apk" \) \
-        -exec cp {} artifacts/ \;
+        -exec cp {} output/ \;
 
-  - uses: actions/upload-artifact@v4
+  - name: Upload Artifacts
+    uses: actions/upload-artifact@v4
     with:
-      name: ${{ matrix.name }}
-      path: artifacts/
+      name: packages-${{ matrix.branch }}
+      path: output
 ```
