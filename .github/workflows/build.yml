@@ -1,0 +1,75 @@
+name: Build OpenWrt Packages
+
+on:
+workflow_dispatch:
+push:
+branches:
+- main
+- master
+
+jobs:
+build:
+runs-on: ubuntu-22.04
+
+```
+strategy:
+  matrix:
+    include:
+      - name: openwrt-24.10.6
+        branch: openwrt-24.10
+
+      - name: openwrt-master-apk
+        branch: master
+
+steps:
+  - uses: actions/checkout@v4
+
+  - name: Install dependencies
+    run: |
+      sudo apt update
+      sudo apt install -y \
+        build-essential clang flex bison gawk gettext \
+        git libncurses5-dev libssl-dev python3 rsync \
+        unzip zlib1g-dev file wget curl
+
+  - name: Clone OpenWrt
+    run: |
+      git clone --depth 1 \
+        -b ${{ matrix.branch }} \
+        https://github.com/openwrt/openwrt.git
+
+  - name: Update feeds
+    run: |
+      cd openwrt
+      ./scripts/feeds update -a
+      ./scripts/feeds install luci-base
+      ./scripts/feeds install rpcd
+
+  - name: Copy package
+    run: |
+      mkdir -p openwrt/package/luci-app-button
+      cp -rf * openwrt/package/luci-app-button/
+
+  - name: Configure
+    run: |
+      cd openwrt
+      make defconfig
+
+  - name: Compile
+    run: |
+      cd openwrt
+      make package/luci-app-button/compile \
+        V=sc -j$(nproc)
+
+  - name: Collect packages
+    run: |
+      mkdir artifacts
+      find openwrt/bin/packages \
+        \( -name "*.ipk" -o -name "*.apk" \) \
+        -exec cp {} artifacts/ \;
+
+  - uses: actions/upload-artifact@v4
+    with:
+      name: ${{ matrix.name }}
+      path: artifacts/
+```
