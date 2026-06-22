@@ -1,86 +1,68 @@
-name: Build OpenWrt Package
+name: Build luci-app-button
 
 on:
 workflow_dispatch:
-push:
-branches:
-- main
-- master
+inputs:
+tag:
+description: "Release Tag"
+required: false
+default: ""
+
+permissions:
+contents: write
 
 jobs:
 build:
+strategy:
+fail-fast: false
+matrix:
+sdk:
+- 24.10.6
+- SNAPSHOT
+
+
 runs-on: ubuntu-latest
 
-
-strategy:
-  fail-fast: false
-  matrix:
-    branch:
-      - openwrt-24.10
-      - master
-
 steps:
-  - name: Checkout
-    uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
-  - name: Install Dependencies
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y \
-        build-essential \
-        clang \
-        flex \
-        bison \
-        gawk \
-        gettext \
-        git \
-        libncurses5-dev \
-        libssl-dev \
-        python3 \
-        rsync \
-        unzip \
-        zlib1g-dev \
-        file \
-        wget \
-        curl
-
-  - name: Clone OpenWrt
-    run: |
-      git clone --depth=1 \
-        -b ${{ matrix.branch }} \
-        https://github.com/openwrt/openwrt.git
-
-  - name: Update Feeds
-    run: |
-      cd openwrt
-      ./scripts/feeds update -a
-      ./scripts/feeds install -a
-
-  - name: Copy Package
-    run: |
-      mkdir -p openwrt/package/luci-app-button
-      cp -rf ./* openwrt/package/luci-app-button/
-
-  - name: Defconfig
-    run: |
-      cd openwrt
-      make defconfig
-
-  - name: Compile Package
-    run: |
-      cd openwrt
-      make package/luci-app-button/compile V=s -j$(nproc)
-
-  - name: Collect Artifacts
-    run: |
-      mkdir output
-      find openwrt/bin/packages \
-        \( -name "*.ipk" -o -name "*.apk" \) \
-        -exec cp {} output/ \;
+  - name: Build Package
+    uses: openwrt/gh-action-sdk@main
+    env:
+      ARCH: aarch64_cortex-a53-${{ matrix.sdk }}
+      FEEDNAME: button_ci
+      PACKAGES: luci-app-button
+      NO_REFRESH_CHECK: 1
+      NO_SHFMT_CHECK: 1
+      V: s
 
   - name: Upload Artifacts
     uses: actions/upload-artifact@v4
     with:
-      name: packages-${{ matrix.branch }}
-      path: output
+      name: ${{ matrix.sdk }}
+      path: |
+        bin/packages/**/*.ipk
+        bin/packages/**/*.apk
+
+
+release:
+needs: build
+if: github.event.inputs.tag != ''
+runs-on: ubuntu-latest
+
+
+steps:
+  - uses: actions/download-artifact@v4
+    with:
+      path: artifacts
+
+  - run: |
+      mkdir release
+      find artifacts -name "*.ipk" -exec cp {} release/ \;
+      find artifacts -name "*.apk" -exec cp {} release/ \;
+
+  - uses: softprops/action-gh-release@v2
+    with:
+      tag_name: ${{ github.event.inputs.tag }}
+      files: release/*
 
