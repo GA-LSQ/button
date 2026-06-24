@@ -1,0 +1,11 @@
+
+*.ipk
+*.apk
+*.o
+*.so
+*.tar.gz
+*.tmp
+output/
+build/
+unpack/
+*.dSYM/
